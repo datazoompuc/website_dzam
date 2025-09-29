@@ -1177,8 +1177,8 @@ h1, .home .wp-block-coblocks-hero h2, .title-about, .fale_conosco,
 }
 .carousel-btn:disabled { opacity: 0.35; cursor: default; }
 
-.carousel-btn.prev { left: 0.25rem; }
-.carousel-btn.next { right: 0.25rem; }
+.carousel-btn.prev { left: 1rem; }
+.carousel-btn.next { right: 1rem; }
 
 @media (max-width: 1024px) {
   :root {

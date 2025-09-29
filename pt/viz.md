@@ -56,7 +56,7 @@ lang: pt
    </div>
     <div class="icone-bloco">
     <a href="{{ site.baseurl }}/pt/viz/series-temporais-dos-sistemas-isolados" target="_blank" rel="noopener noreferrer">
-      <img src="{{ site.baseurl }}/assets/img/icons_viz/icon_ts_sis_isolados.png" alt="ícone série temporais de sistemas isolados">
+      <img src="{{ site.baseurl }}/assets/img/icons_viz/icon_ts_sis_isolados.jpg" alt="ícone séries temporais de sistemas isolados">
     </a><br>
     <p>Séries Temporais dos Sistemas Isolados de Energia</p>
    </div>
@@ -68,7 +68,7 @@ lang: pt
    </div>
    <div class="icone-bloco">
     <a href="{{ site.baseurl }}/pt/viz/mapa-floresta-desmatamento" target="_blank" rel="noopener noreferrer">
-      <img src="{{ site.baseurl }}/assets/img/icons_viz/icon_ts_mapa_evolucao_desmatamento.jpg" alt="ícone mapa de área de floresta ou desmatada">
+      <img src="{{ site.baseurl }}/assets/img/icons_viz/icon_ts_mapa_evolucao_desmatamento.png" alt="ícone mapa de área de floresta ou desmatada">
     </a><br>
     <p>Mapa de Área de Floresta ou Desmatada</p>
    </div>
@@ -82,53 +82,147 @@ lang: pt
 <br>
 <br>
 
+
 <script>
 (function () {
+  const AUTOPLAY_MS = 6000;
+  const RESPECTS_REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   const container = document.querySelector('.imagens-container');
   if (!container) return;
 
   const track = container.querySelector('.imagens-track');
-  const cards = Array.from(track.children);
+  const originals = Array.from(track.children); // guarda os cards originais
   const prev = container.querySelector('.carousel-btn.prev');
   const next = container.querySelector('.carousel-btn.next');
 
-  let index = 0;
+  let index = 0;        // índice no trilho COM clones
+  let vis = 1;          // quantos cards cabem na viewport
+  let autoplayId = null;
+  let isHoveringOrFocusing = false;
 
+  // utilidades
   function stepSize() {
-    const first = cards[0];
+    const first = track.children[0];
     const rect = first.getBoundingClientRect();
     const style = getComputedStyle(first);
     const ml = parseFloat(style.marginLeft) || 0;
     const mr = parseFloat(style.marginRight) || 0;
-    return rect.width + ml + mr + parseFloat(getComputedStyle(track).gap || 0);
+    const gap = parseFloat(getComputedStyle(track).gap || 0);
+    return rect.width + ml + mr + gap;
   }
-
-  function update() {
-    const x = -index * stepSize();
-    track.style.transform = `translateX(${x * -1 < 0 ? 0 : -index * stepSize()}px)`; // keep negative translate
+  function visibleCount() {
+    const s = stepSize();
+    if (s <= 0) return 1;
+    return Math.max(1, Math.floor(container.clientWidth / s));
+  }
+  function setTransform(noAnim = false) {
+    if (noAnim) track.style.transition = 'none';
     track.style.transform = `translateX(${-index * stepSize()}px)`;
-    prev.disabled = index <= 0;
-    next.disabled = index >= cards.length - 1;
+    if (noAnim) {
+      // força reflow e reativa animação
+      track.offsetHeight;
+      track.style.transition = 'transform 0.4s ease-in-out';
+    }
   }
 
-  next.addEventListener('click', () => {
-    if (index < cards.length - 1) { index++; update(); }
+  // constrói/Reconstrói o trilho infinito com clones
+  function build() {
+    const currentVis = visibleCount();
+    // salva posição relativa se quiser manter “grupo” atual ao reconstruir
+    const logicalPos = (index - vis + originals.length) % originals.length || 0;
+
+    track.innerHTML = '';
+    vis = currentVis;
+
+    // clones: últimos vis no início, originais, primeiros vis no fim
+    const head = originals.slice(-vis).map(n => n.cloneNode(true));
+    const tail = originals.slice(0, vis).map(n => n.cloneNode(true));
+
+    head.forEach(n => track.appendChild(n));
+    originals.forEach(n => track.appendChild(n));
+    tail.forEach(n => track.appendChild(n));
+
+    // começamos no primeiro original (após os clones de cabeça)
+    index = vis + logicalPos;    // preserva grupo na troca de layout
+    setTransform(true);
+    updateButtons();             // nos infinitos, os botões nunca desabilitam
+  }
+
+  function updateButtons() {
+    // em loop infinito não desabilitamos setas
+    prev.disabled = false;
+    next.disabled = false;
+  }
+
+  function goNext() {
+    index++;
+    setTransform();
+  }
+
+  function goPrev() {
+    index--;
+    setTransform();
+  }
+
+  // quando a transição termina, checa se estamos nos clones e "teleporta"
+  track.addEventListener('transitionend', () => {
+    const total = originals.length;
+    // faixa de originais: [vis, vis + total - 1]
+    if (index >= vis + total) {
+      // saiu pelo fim -> volta para início dos originais
+      index = vis;
+      setTransform(true);
+    } else if (index < vis) {
+      // saiu pelo começo -> vai para final dos originais
+      index = vis + total - 1;
+      setTransform(true);
+    }
   });
 
-  prev.addEventListener('click', () => {
-    if (index > 0) { index--; update(); }
-  });
+  // eventos de controle
+  next.addEventListener('click', () => { goNext(); restartAutoplay(); });
+  prev.addEventListener('click', () => { goPrev(); restartAutoplay(); });
 
-  // teclado 
+  // teclado
   container.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight') next.click();
-    if (e.key === 'ArrowLeft') prev.click();
+    if (e.key === 'ArrowRight') { goNext(); restartAutoplay(); }
+    if (e.key === 'ArrowLeft')  { goPrev();  restartAutoplay(); }
   });
-  container.tabIndex = 0; // para receber foco
+  container.tabIndex = 0;
 
-  // recalc em resize
-  window.addEventListener('resize', update);
+  // pausa em hover/focus
+  container.addEventListener('mouseenter', () => { isHoveringOrFocusing = true; stopAutoplay(); });
+  container.addEventListener('mouseleave', () => { isHoveringOrFocusing = false; startAutoplay(); });
+  container.addEventListener('focusin',  () => { isHoveringOrFocusing = true; stopAutoplay(); });
+  container.addEventListener('focusout', () => { isHoveringOrFocusing = false; startAutoplay(); });
 
-  update();
+  // pausa quando a aba perde foco
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopAutoplay(); else startAutoplay();
+  });
+
+  // autoplay
+  function startAutoplay() {
+    if (RESPECTS_REDUCED_MOTION) return;
+    if (isHoveringOrFocusing) return;
+    if (autoplayId) return;
+    autoplayId = setInterval(goNext, AUTOPLAY_MS);
+  }
+  function stopAutoplay() {
+    if (autoplayId) { clearInterval(autoplayId); autoplayId = null; }
+  }
+  function restartAutoplay() { stopAutoplay(); startAutoplay(); }
+
+  // rebuild em resize (com debounce simples)
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { build(); restartAutoplay(); }, 120);
+  });
+
+  // boot
+  build();
+  startAutoplay();
 })();
 </script>
